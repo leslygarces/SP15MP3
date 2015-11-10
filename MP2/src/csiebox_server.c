@@ -53,33 +53,69 @@ void csiebox_server_init(csiebox_server** server, int argc, char** argv) {
     return;
   }
   memset(tmp->client, 0, sizeof(csiebox_client_info*) * getdtablesize());
-  tmp->listen_fd = fd;
+  tmp->sock = fd;
   *server = tmp;
 }
 
 int csiebox_server_run(csiebox_server* server) { 
   int conn_fd, conn_len;
-  struct sockaddr_in addr;
+  struct sockaddr_in clientname;
+  size_t size;  
+  fd_set active_fd_set, read_fd_set;
+  int i;
+  FD_ZERO (&active_fd_set);
+  FD_SET (server->sock, &active_fd_set);
+
   while (1) {
-  	memset(&addr, 0, sizeof(addr));
-    conn_len = 0;
-    // waiting client connect
-    conn_fd = accept(server->listen_fd, (struct sockaddr*)&addr, (socklen_t*)&conn_len);
-    if (conn_fd < 0) {
-      if (errno == ENFILE) {
-        fprintf(stderr, "out of file descriptor table\n");
-        continue;
-      } 
-      else if (errno == EAGAIN || errno == EINTR) {
-        continue;
-      } else {
-        fprintf(stderr, "accept err\n");
-        fprintf(stderr, "code: %s\n", strerror(errno));
-        break;
-      }
+
+      /* Block until input arrives on one or more active sockets. */
+      read_fd_set = active_fd_set;
+      fprintf(stderr, "Block until input arrives on one or more active sockets...\n");      
+      if (select (FD_SETSIZE, &read_fd_set, NULL, NULL, NULL) < 0)
+        {
+          perror ("select");
+          exit (EXIT_FAILURE);
+        }
+
+      fprintf(stderr, "unblocked....\n");      
+
+      /* Service all the sockets with input pending. */
+      for (i = 0; i < FD_SETSIZE; ++i) {
+        if (FD_ISSET (i, &read_fd_set))
+          {
+            if (i == server->sock)
+              {
+                /* Connection request on original socket. */
+                fprintf(stderr, "Connection request on original socket...\n");
+                int new;
+                size = sizeof (clientname);
+                new = accept (server->sock,
+                              (struct sockaddr *) &clientname,
+                              &size);
+                if (new < 0)
+                  {
+                    perror ("accept");
+                    exit (EXIT_FAILURE);
+                  }
+                fprintf (stderr,
+                         "Server: connect from host %s, port %hd.\n",
+                         inet_ntoa (clientname.sin_addr),
+                         ntohs (clientname.sin_port));
+                FD_SET (new, &active_fd_set);
+              }
+            else
+              {
+                fprintf(stderr, "before handle_request...\n");              
+                /* Data arriving on an already-connected socket. */
+                handle_request(server, i);
+                    close (i);
+                    FD_CLR (i, &active_fd_set);
+                fprintf(stderr, "after handle_request...\n");              
+
+                  
+              }
+          }
     }
-	  // handle request from connected socket fd
-    handle_request(server, conn_fd);
   }
   return 1;
 }
@@ -90,7 +126,7 @@ void csiebox_server_destroy(csiebox_server** server) {
   if (!tmp) {
     return;
   }
-  close(tmp->listen_fd);
+  //close(tmp->listen_fd);
   free(tmp->client);
   free(tmp);
 }
@@ -162,6 +198,7 @@ static void handle_request(csiebox_server* server, int conn_fd) {
   	    if (complete_message_with_header(conn_fd, &header, &meta)) {
   	      sync_file(server, conn_fd, &meta);
   	    }
+        fprintf(stderr, "end sync meta\n");
   	    break;
   	  case CSIEBOX_PROTOCOL_OP_SYNC_END:
   	    fprintf(stderr, "sync end\n");
@@ -184,6 +221,7 @@ static int get_account_info(
   csiebox_server* server,  const char* user, csiebox_account_info* info) {
   FILE* file = fopen(server->arg.account_path, "r");
   if (!file) {
+    fprintf(stderr, "could not open accounts file\n");
     return 0;
   }
   size_t buflen = 100;
@@ -200,6 +238,7 @@ static int get_account_info(
       fprintf(stderr, "ill form in account file, line %d\n", line);
       continue;
     }
+    fprintf(stderr, "checking user %s\n",u);
     if (strcmp(user, u) == 0) {
       memcpy(info->user, user, strlen(user));
       char* passwd = strtok(NULL, ",");
@@ -222,7 +261,7 @@ static void login(csiebox_server* server, int conn_fd, csiebox_protocol_login* l
   csiebox_client_info* info = (csiebox_client_info*)malloc(sizeof(csiebox_client_info));
   memset(info, 0, sizeof(csiebox_client_info));
   if (!get_account_info(server, login->message.body.user, &(info->account))) {
-    fprintf(stderr, "cannot find account\n");
+    fprintf(stderr, "cannot find account %s\n",login->message.body.user);
     succ = 0;
   }
   if (succ &&
@@ -301,6 +340,7 @@ static void sync_file(csiebox_server* server, int conn_fd, csiebox_protocol_meta
     if (memcmp(hash, meta->message.body.hash, MD5_DIGEST_LENGTH) != 0) {
       need_data = 1;
     }
+
   }
 
   csiebox_protocol_header header;
@@ -359,7 +399,9 @@ static void sync_file(csiebox_server* server, int conn_fd, csiebox_protocol_meta
     header.res.op = CSIEBOX_PROTOCOL_OP_SYNC_FILE;
     header.res.status = CSIEBOX_PROTOCOL_STATUS_OK;
     send_message(conn_fd, &header, sizeof(header));
+    fprintf(stderr, "file synced\n");
   }
+  fprintf(stderr, "sync file ended\n");
 }
 
 static char* get_user_homedir(csiebox_server* server, csiebox_client_info* info) {

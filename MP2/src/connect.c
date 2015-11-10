@@ -1,4 +1,5 @@
 #include "connect.h"
+#include <errno.h>
 #include <unistd.h>
 #include <stdio.h>
 #include <sys/socket.h>
@@ -7,8 +8,11 @@
 #include <netdb.h>
 #include <string.h>
 #include <stdlib.h>
+#include <sys/types.h>
+ 
 
-int init_server(int port) {
+
+int make_socket (uint16_t port){
   int fd = socket(AF_INET, SOCK_STREAM, 0);
   if (fd < 0) {
     fprintf(stderr, "socket open error\n");
@@ -23,12 +27,18 @@ int init_server(int port) {
     fprintf(stderr, "port bind error\n");
     return -1;
   }
-  if (listen(fd, 1024) < 0) {
-    close(fd);
-    fprintf(stderr, "port listen error\n");
-    return -1;
-  }
   return fd;
+}
+
+int init_server(int port) {
+  int sock = make_socket (port);
+  if (listen (sock, 1) < 0)
+    {
+      perror ("listen");
+      exit (EXIT_FAILURE);
+    }
+
+  return sock;
 }
 
 int connect_to(const char* servername, int port) {
@@ -59,6 +69,7 @@ int connect_to(const char* servername, int port) {
 }
 
 int server_start() {
+  /*
   int fd = connect_to("localhost", default_register_port);
   if (fd < 0) {
     fprintf(stderr, "socket open error\n");
@@ -85,9 +96,12 @@ int server_start() {
   }
   fprintf(stderr, "assigned port: %d\n", reg);
   return init_server(reg);
+  */
+  return init_server(7887);
 }
 
 int client_start(const char* username, const char* server) {
+  /*
   int fd = connect_to(server, default_register_port);
   if (fd < 0) {
     fprintf(stderr, "socket open error\n");
@@ -112,4 +126,7 @@ int client_start(const char* username, const char* server) {
     return -1;
   }
   return connect_to(server, reg);
+  */
+  return connect_to(server, 7887);
+
 }
