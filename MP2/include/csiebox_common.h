@@ -22,6 +22,7 @@ extern "C" {
 #define USER_LEN_MAX 30
 #define PASSWD_LEN_MAX 30
 
+
 typedef enum {
   CSIEBOX_PROTOCOL_MAGIC_REQ = 0x90,
   CSIEBOX_PROTOCOL_MAGIC_RES = 0x91,
@@ -144,6 +145,11 @@ int send_message(int conn_fd, void* message, size_t len);
 int get_hash_code(const char* path);
 void get_dir_and_name(const char* target, char* dir, char* name);
 int md5_link(const char* path, uint8_t digest[MD5_DIGEST_LENGTH]);
+
+static void sync_file(int conn_fd,int client_id, char* root, char* path);
+static csiebox_protocol_status sync_file_meta(int conn_fd,int client_id, char* root, char* path);
+static void sync_file_data(int conn_fd,int client_id, char* path);
+static char* convert_to_relative_path(char* root, const char* path);
 
 #ifdef __cplusplus
 }
