@@ -22,7 +22,6 @@ static int handle_request(csiebox_server* server, int conn_fd);
 static int get_account_info(csiebox_server* server,  const char* user, csiebox_account_info* info);
 static void login(csiebox_server* server, int conn_fd, csiebox_protocol_login* login);
 static void logout(csiebox_server* server, int conn_fd);
-static void sync_file_recieve(csiebox_server* server, int conn_fd, csiebox_protocol_meta* meta);
 static char* get_user_homedir(csiebox_server* server, csiebox_client_info* info);
 static void rm_file(csiebox_server* server, int conn_fd, csiebox_protocol_rm* rm);
 
