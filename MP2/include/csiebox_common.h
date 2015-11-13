@@ -146,11 +146,11 @@ int get_hash_code(const char* path);
 void get_dir_and_name(const char* target, char* dir, char* name);
 int md5_link(const char* path, uint8_t digest[MD5_DIGEST_LENGTH]);
 
-static void sync_file(int conn_fd,int client_id, char* root, char* path);
-static csiebox_protocol_status sync_file_meta(int conn_fd,int client_id, char* root, char* path);
-static void sync_file_data(int conn_fd,int client_id, char* path);
-static char* convert_to_relative_path(char* root, const char* path);
-static void sync_file_recieve(char* homedir, int conn_fd, csiebox_protocol_meta* meta);
+ void sync_file(int conn_fd,int client_id, char* root, char* path);
+ csiebox_protocol_status sync_file_meta(int conn_fd,int client_id, char* root, char* path);
+ void sync_file_data(int conn_fd,int client_id, char* path);
+ char* convert_to_relative_path(char* root, const char* path);
+ void sync_file_recieve(char* homedir, int conn_fd, csiebox_protocol_meta* meta);
 #ifdef __cplusplus
 }
 #endif
