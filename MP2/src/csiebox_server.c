@@ -18,7 +18,7 @@
 #include <utime.h>
 
 static int parse_arg(csiebox_server* server, int argc, char** argv);
-static void handle_request(csiebox_server* server, int conn_fd);
+static int handle_request(csiebox_server* server, int conn_fd);
 static int get_account_info(csiebox_server* server,  const char* user, csiebox_account_info* info);
 static void login(csiebox_server* server, int conn_fd, csiebox_protocol_login* login);
 static void logout(csiebox_server* server, int conn_fd);
@@ -107,9 +107,10 @@ int csiebox_server_run(csiebox_server* server) {
               {
                 fprintf(stderr, "before handle_request...\n");              
                 /* Data arriving on an already-connected socket. */
-                handle_request(server, i);
+                if (!handle_request(server, i)) {
                     //close (i);
                     FD_CLR (i, &active_fd_set);
+                }
                 fprintf(stderr, "after handle_request new ...\n");              
 
                   
@@ -177,7 +178,7 @@ static int parse_arg(csiebox_server* server, int argc, char** argv) {
   return 1;
 }
 
-static void handle_request(csiebox_server* server, int conn_fd) {
+static int handle_request(csiebox_server* server, int conn_fd) {
   csiebox_protocol_header header;
   memset(&header, 0, sizeof(header));
   if (recv_message(conn_fd, &header, sizeof(header))) {
@@ -213,7 +214,10 @@ static void handle_request(csiebox_server* server, int conn_fd) {
     	    break;
   	  }    
     }
+  }else {
+    return -1;
   }
+  return 0;
 }
 static int get_account_info(
   csiebox_server* server,  const char* user, csiebox_account_info* info) {
