@@ -180,43 +180,41 @@ static int parse_arg(csiebox_server* server, int argc, char** argv) {
 static void handle_request(csiebox_server* server, int conn_fd) {
   csiebox_protocol_header header;
   memset(&header, 0, sizeof(header));
-  while (recv_message(conn_fd, &header, sizeof(header))) {
-  	if (header.req.magic != CSIEBOX_PROTOCOL_MAGIC_REQ) {
-		  continue;	 
-	  }
-	  switch (header.req.op) {
-      case CSIEBOX_PROTOCOL_OP_LOGIN:
-  	    fprintf(stderr, "login\n");
-  	    csiebox_protocol_login req;
-  	    if (complete_message_with_header(conn_fd, &header, &req)) {
-  	      login(server, conn_fd, &req);
-  	    }
-  	    break;
-  	  case CSIEBOX_PROTOCOL_OP_SYNC_META:
-  	    fprintf(stderr, "sync meta\n");
-  	    csiebox_protocol_meta meta;
-  	    if (complete_message_with_header(conn_fd, &header, &meta)) {
-  	      sync_file(server, conn_fd, &meta);
-  	    }
-        fprintf(stderr, "end sync meta\n");
-  	    break;
-  	  case CSIEBOX_PROTOCOL_OP_SYNC_END:
-  	    fprintf(stderr, "sync end\n");
-  	    break;
-  	  case CSIEBOX_PROTOCOL_OP_RM:
-  	    fprintf(stderr, "rm\n");
-  	    csiebox_protocol_rm rm;
-  	    if (complete_message_with_header(conn_fd, &header, &rm)) {
-  	      rm_file(server, conn_fd, &rm);
-  	    }
-  	    break;
-  	  default:
-  	    fprintf(stderr, "unknow op %x\n", header.req.op);
-  	    break;
-  	}    
+  if (recv_message(conn_fd, &header, sizeof(header))) {
+  	if (header.req.magic == CSIEBOX_PROTOCOL_MAGIC_REQ) {
+  	  switch (header.req.op) {
+        case CSIEBOX_PROTOCOL_OP_LOGIN:
+    	    fprintf(stderr, "login\n");
+    	    csiebox_protocol_login req;
+    	    if (complete_message_with_header(conn_fd, &header, &req)) {
+    	      login(server, conn_fd, &req);
+    	    }
+    	    break;
+    	  case CSIEBOX_PROTOCOL_OP_SYNC_META:
+    	    fprintf(stderr, "sync meta\n");
+    	    csiebox_protocol_meta meta;
+    	    if (complete_message_with_header(conn_fd, &header, &meta)) {
+    	      sync_file(server, conn_fd, &meta);
+    	    }
+          fprintf(stderr, "end sync meta\n");
+    	    break;
+    	  case CSIEBOX_PROTOCOL_OP_SYNC_END:
+    	    fprintf(stderr, "sync end\n");
+    	    break;
+    	  case CSIEBOX_PROTOCOL_OP_RM:
+    	    fprintf(stderr, "rm\n");
+    	    csiebox_protocol_rm rm;
+    	    if (complete_message_with_header(conn_fd, &header, &rm)) {
+    	      rm_file(server, conn_fd, &rm);
+    	    }
+    	    break;
+    	  default:
+    	    fprintf(stderr, "unknow op %x\n", header.req.op);
+    	    break;
+  	  }    
+    }
   }
 }
-
 static int get_account_info(
   csiebox_server* server,  const char* user, csiebox_account_info* info) {
   FILE* file = fopen(server->arg.account_path, "r");
