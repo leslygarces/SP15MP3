@@ -256,7 +256,7 @@ static void sync_all(csiebox_client* client, char* longest_path, int level) {
       level++;
       if (level > max_level){
         max_level = level;
-        strcpy(longest_path, convert_to_relative_path(client, file->d_name));
+        strcpy(longest_path, convert_to_relative_path(client->root, file->d_name));
       }
       if (chdir(file->d_name) != 0) {
         fprintf(stderr, "bad dir %s\n", file->d_name);
@@ -392,7 +392,7 @@ static void monitor_home(csiebox_client* client) {
 }
 
 static void rm_file(csiebox_client* client, char* path, int is_dir) {
-  char* relative = convert_to_relative_path(client, path);
+  char* relative = convert_to_relative_path(client->root, path);
   if (!relative) {
     fprintf(stderr, "conver relative fail\n");
     return;
