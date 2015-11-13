@@ -178,6 +178,15 @@ static int parse_arg(csiebox_server* server, int argc, char** argv) {
   return 1;
 }
 
+static void send_end_sync_to_client(int conn_fd) {
+  csiebox_protocol_header req;
+  memset(&req, 0, sizeof(req));
+  req.magic = CSIEBOX_PROTOCOL_MAGIC_REQ;
+  req.op = CSIEBOX_PROTOCOL_OP_SYNC_END;
+  req.datalen = 0;
+  send_message(conn_fd, &req, sizeof(req));
+}
+
 static int handle_request(csiebox_server* server, int conn_fd) {
   csiebox_protocol_header header;
   memset(&header, 0, sizeof(header));
@@ -189,6 +198,10 @@ static int handle_request(csiebox_server* server, int conn_fd) {
     	    csiebox_protocol_login req;
     	    if (complete_message_with_header(conn_fd, &header, &req)) {
     	      login(server, conn_fd, &req);
+            fprintf(stderr, "before send end sync\n");
+
+            send_end_sync_to_client(conn_fd);
+            fprintf(stderr, "after send end sync\n");
     	    }
     	    break;
     	  case CSIEBOX_PROTOCOL_OP_SYNC_META:

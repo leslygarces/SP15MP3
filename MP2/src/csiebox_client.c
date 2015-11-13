@@ -20,20 +20,46 @@ static int prepare_and_sync(csiebox_client* client);
 static void sync_all(csiebox_client* client, char* longest_path, int level);
 
 static char* check_walked_dir(csiebox_client* client);
-static void sync_file(int conn_fd,int client_id, char* root, char* path);
-static csiebox_protocol_status sync_file_meta(int conn_fd,int client_id, char* root, char* path);
-static void sync_file_data(int conn_fd,int client_id, char* path);
-static char* convert_to_relative_path(char* root, const char* path);
 static void monitor_home(csiebox_client* client);
 static void rm_file(csiebox_client* client, char* path, int is_dir);
 static void add_inotify(csiebox_client* client, char* path);
 static void handle_inotify(csiebox_client* client);
+static void handle_server_sync(csiebox_client* client, int conn_fd) ;
 
 #define IN_FLAG (IN_CREATE | IN_DELETE | IN_ATTRIB | IN_MODIFY)
 #define EVENT_SIZE (sizeof(struct inotify_event))
 #define EVENT_BUF_LEN (1024 * (EVENT_SIZE + 16))
 
 int max_level = 0;
+
+static void handle_server_sync(csiebox_client* client, int conn_fd) {
+  csiebox_protocol_header header;
+  memset(&header, 0, sizeof(header));
+  int got_sync_end = 0;
+  while (!got_sync_end && recv_message(conn_fd, &header, sizeof(header))) {
+    if (header.req.magic == CSIEBOX_PROTOCOL_MAGIC_REQ) {
+      switch (header.req.op) {
+        case CSIEBOX_PROTOCOL_OP_SYNC_META:
+          fprintf(stderr, "sync meta\n");
+          csiebox_protocol_meta meta;
+          if (complete_message_with_header(conn_fd, &header, &meta)) {
+            char* homedir = client->arg.path;
+            sync_file_recieve(homedir, conn_fd, &meta);
+          }
+          fprintf(stderr, "end sync meta\n");
+          break;
+        case CSIEBOX_PROTOCOL_OP_SYNC_END:
+          fprintf(stderr, "sync end\n");
+          got_sync_end = 1;
+          break;
+        default:
+          fprintf(stderr, "unknow op %x\n", header.req.op);
+          break;
+      }    
+    }
+  }
+}
+
 
 void csiebox_client_init(
   csiebox_client** client, int argc, char** argv) {
@@ -82,6 +108,8 @@ int csiebox_client_run(csiebox_client* client) {
   }
   fprintf(stderr, "login success\n");
   
+  handle_server_sync(client,client->conn_fd)
+
   if (!prepare_and_sync(client)) {
     fprintf(stderr, "sync fail\n");
     return 0;
@@ -271,119 +299,6 @@ static void sync_all(csiebox_client* client, char* longest_path, int level) {
   return;
 }
 
-static void sync_file(int conn_fd,int client_id, char* root, char* path) {
-  csiebox_protocol_status status;
-  fprintf(stderr, "before sync meta for  %s\n", path);
-  status = sync_file_meta(conn_fd,client_id, root, path);
-  fprintf(stderr, "after sync meta for  %s status is %d\n", path, status);
-  if (status == CSIEBOX_PROTOCOL_STATUS_MORE) {
-    sync_file_data(conn_fd, client_id, path);
-  }
-}
-
-static csiebox_protocol_status sync_file_meta(int conn_fd,int client_id, char* root, char* path) {
-  char* relative = convert_to_relative_path(root, path);
-  if (!relative) {
-    fprintf(stderr, "convert relative fail: %s\n", path);
-    return CSIEBOX_PROTOCOL_STATUS_FAIL;
-  }
-  csiebox_protocol_meta meta;
-  memset(&meta, 0, sizeof(meta));
-  meta.message.header.req.magic = CSIEBOX_PROTOCOL_MAGIC_REQ;
-  meta.message.header.req.op = CSIEBOX_PROTOCOL_OP_SYNC_META;
-  meta.message.header.req.client_id = client_id;
-  meta.message.header.req.datalen = sizeof(meta) - sizeof(csiebox_protocol_header);
-  meta.message.body.pathlen = strlen(relative);
-  lstat(path, &(meta.message.body.stat));
-  if ((meta.message.body.stat.st_mode & S_IFMT) == S_IFDIR) {
-  } else {
-    md5_file(path, meta.message.body.hash);
-  }
-  fprintf(stderr, "sending meta for: %s\n", path);
-  send_message(conn_fd, &meta, sizeof(meta));
-  fprintf(stderr, "sending path for: %s\n", path);
-  send_message(conn_fd, relative, strlen(relative));
-  free(relative);
-  
-  csiebox_protocol_header header;
-  recv_message(conn_fd, &header, sizeof(header));
-  if (header.res.status == CSIEBOX_PROTOCOL_STATUS_FAIL) {
-    fprintf(stderr, "sync meta fail: %s\n", path);
-    return;
-  }
-  return header.res.status;
-}
-
-static void sync_file_data(
-  int conn_fd, int client_id, char* path) {
-  fprintf(stderr, "file_data: %s\n", path);
-  struct stat stat;
-  memset(&stat, 0, sizeof(stat));
-  lstat(path, &stat);
-  csiebox_protocol_file file;
-  memset(&file, 0, sizeof(file));
-  file.message.header.req.magic = CSIEBOX_PROTOCOL_MAGIC_REQ;
-  file.message.header.req.op = CSIEBOX_PROTOCOL_OP_SYNC_FILE;
-  file.message.header.req.client_id = client_id;
-  file.message.header.req.datalen = sizeof(file) - sizeof(csiebox_protocol_header);
-  if ((stat.st_mode & S_IFMT) == S_IFDIR) {
-    file.message.body.datalen = 0;
-    fprintf(stderr, "dir datalen: %zu\n", file.message.body.datalen);
-    send_message(conn_fd, &file, sizeof(file));
-  } else {
-    int fd = open(path, O_RDONLY);
-    if (fd < 0) {
-      fprintf(stderr, "open fail\n");
-      file.message.body.datalen = 0;
-      send_message(conn_fd, &file, sizeof(file));
-    } else {
-      file.message.body.datalen = lseek(fd, 0, SEEK_END);
-      fprintf(stderr, "else datalen: %zd\n", file.message.body.datalen);
-      send_message(conn_fd, &file, sizeof(file));
-      lseek(fd, 0, SEEK_SET);
-      char buf[4096];
-      memset(buf, 0, 4096);
-      size_t readlen;
-      while ((readlen = read(fd, buf, 4096)) > 0) {
-        send_message(conn_fd, buf, readlen);
-      }
-      close(fd);
-    }
-  }
-
-  csiebox_protocol_header header;
-  recv_message(conn_fd, &header, sizeof(header));
-  if (header.res.status != CSIEBOX_PROTOCOL_STATUS_OK) {
-    fprintf(stderr, "sync data fail: %s\n", path);
-  }
-}
-
-static char* convert_to_relative_path(char* root, const char* path) {
-  char* ret = (char*)malloc(sizeof(char) * PATH_MAX);
-  if (path[0] == '/') {
-    strcpy(ret, path);
-  } else {
-    char dir[PATH_MAX];
-    memset(dir, 0, PATH_MAX);
-    getcwd(dir, PATH_MAX);
-    sprintf(ret, "%s/%s", dir, path);
-  }
-  if (strncmp(root, ret, strlen(root)) != 0) {
-    free(ret);
-    return NULL;
-  }
-  size_t rootlen = strlen(root);
-  size_t retlen = strlen(ret);
-  size_t i;
-  for (i = 0; i < retlen; ++i) {
-    if (i < rootlen) {
-      ret[i] = ret[i + rootlen];
-    } else {
-      ret[i] = 0;
-    }
-  }
-  return ret;
-}
 
 static void monitor_home(csiebox_client* client) {
   while (1) {
