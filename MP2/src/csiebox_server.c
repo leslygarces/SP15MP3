@@ -108,7 +108,7 @@ int csiebox_server_run(csiebox_server* server) {
                 fprintf(stderr, "before handle_request...\n");              
                 /* Data arriving on an already-connected socket. */
                 handle_request(server, i);
-                    close (i);
+                    //close (i);
                     FD_CLR (i, &active_fd_set);
                 fprintf(stderr, "after handle_request...\n");              
 
