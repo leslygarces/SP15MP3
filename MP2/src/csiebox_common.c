@@ -14,7 +14,7 @@
 
 
 
-static void sync_file(int conn_fd,int client_id, char* root, char* path) {
+ void sync_file(int conn_fd,int client_id, char* root, char* path) {
   csiebox_protocol_status status;
   fprintf(stderr, "before sync meta for  %s\n", path);
   status = sync_file_meta(conn_fd,client_id, root, path);
@@ -24,7 +24,7 @@ static void sync_file(int conn_fd,int client_id, char* root, char* path) {
   }
 }
 
-static csiebox_protocol_status sync_file_meta(int conn_fd,int client_id, char* root, char* path) {
+ csiebox_protocol_status sync_file_meta(int conn_fd,int client_id, char* root, char* path) {
   char* relative = convert_to_relative_path(root, path);
   if (!relative) {
     fprintf(stderr, "convert relative fail: %s\n", path);
@@ -57,7 +57,7 @@ static csiebox_protocol_status sync_file_meta(int conn_fd,int client_id, char* r
   return header.res.status;
 }
 
-static void sync_file_data(
+ void sync_file_data(
   int conn_fd, int client_id, char* path) {
   fprintf(stderr, "file_data: %s\n", path);
   struct stat stat;
@@ -101,7 +101,7 @@ static void sync_file_data(
   }
 }
 
-static char* convert_to_relative_path(char* root, const char* path) {
+ char* convert_to_relative_path(char* root, const char* path) {
   char* ret = (char*)malloc(sizeof(char) * PATH_MAX);
   if (path[0] == '/') {
     strcpy(ret, path);
@@ -129,7 +129,7 @@ static char* convert_to_relative_path(char* root, const char* path) {
 }
 
 
-static void sync_file_recieve(char* homedir, int conn_fd, csiebox_protocol_meta* meta) {
+ void sync_file_recieve(char* homedir, int conn_fd, csiebox_protocol_meta* meta) {
   printf("homedir = %s\n", homedir);
   char buf[PATH_MAX], req_path[PATH_MAX];
   memset(buf, 0, PATH_MAX);
