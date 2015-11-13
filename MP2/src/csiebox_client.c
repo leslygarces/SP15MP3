@@ -20,10 +20,10 @@ static int prepare_and_sync(csiebox_client* client);
 static void sync_all(csiebox_client* client, char* longest_path, int level);
 
 static char* check_walked_dir(csiebox_client* client);
-static void sync_file(csiebox_client* client, char* path);
-static csiebox_protocol_status sync_file_meta(csiebox_client* client, char* path);
-static void sync_file_data(csiebox_client* client, char* path);
-static char* convert_to_relative_path(csiebox_client* client, const char* path);
+static void sync_file(int conn_fd,int client_id, char* root, char* path);
+static csiebox_protocol_status sync_file_meta(int conn_fd,int client_id, char* root, char* path);
+static void sync_file_data(int conn_fd,int client_id,int client_id, char* path);
+static char* convert_to_relative_path(char* root, const char* path);
 static void monitor_home(csiebox_client* client);
 static void rm_file(csiebox_client* client, char* path, int is_dir);
 static void add_inotify(csiebox_client* client, char* path);
@@ -251,7 +251,7 @@ static void sync_all(csiebox_client* client, char* longest_path, int level) {
 	  continue;
     }
     lstat(file->d_name, &file_stat); 
-    sync_file(client, file->d_name);
+    sync_file(client->conn_fd,client->client_id,client->root, file->d_name);
     if ((file_stat.st_mode & S_IFMT) == S_IFDIR) {
       level++;
       if (level > max_level){
@@ -271,18 +271,18 @@ static void sync_all(csiebox_client* client, char* longest_path, int level) {
   return;
 }
 
-static void sync_file(csiebox_client* client, char* path) {
+static void sync_file(int conn_fd,int client_id, char* root, char* path) {
   csiebox_protocol_status status;
   fprintf(stderr, "before sync meta for  %s\n", path);
-  status = sync_file_meta(client, path);
+  status = sync_file_meta(conn_fd,client_id, root, path);
   fprintf(stderr, "after sync meta for  %s status is %d\n", path, status);
   if (status == CSIEBOX_PROTOCOL_STATUS_MORE) {
-    sync_file_data(client, path);
+    sync_file_data(conn_fd, client_id, path);
   }
 }
 
-static csiebox_protocol_status sync_file_meta(csiebox_client* client, char* path) {
-  char* relative = convert_to_relative_path(client, path);
+static csiebox_protocol_status sync_file_meta(int conn_fd,int client_id, char* root, char* path) {
+  char* relative = convert_to_relative_path(root, path);
   if (!relative) {
     fprintf(stderr, "convert relative fail: %s\n", path);
     return CSIEBOX_PROTOCOL_STATUS_FAIL;
@@ -291,7 +291,7 @@ static csiebox_protocol_status sync_file_meta(csiebox_client* client, char* path
   memset(&meta, 0, sizeof(meta));
   meta.message.header.req.magic = CSIEBOX_PROTOCOL_MAGIC_REQ;
   meta.message.header.req.op = CSIEBOX_PROTOCOL_OP_SYNC_META;
-  meta.message.header.req.client_id = client->client_id;
+  meta.message.header.req.client_id = client_id;
   meta.message.header.req.datalen = sizeof(meta) - sizeof(csiebox_protocol_header);
   meta.message.body.pathlen = strlen(relative);
   lstat(path, &(meta.message.body.stat));
@@ -300,13 +300,13 @@ static csiebox_protocol_status sync_file_meta(csiebox_client* client, char* path
     md5_file(path, meta.message.body.hash);
   }
   fprintf(stderr, "sending meta for: %s\n", path);
-  send_message(client->conn_fd, &meta, sizeof(meta));
+  send_message(conn_fd, &meta, sizeof(meta));
   fprintf(stderr, "sending path for: %s\n", path);
-  send_message(client->conn_fd, relative, strlen(relative));
+  send_message(conn_fd, relative, strlen(relative));
   free(relative);
   
   csiebox_protocol_header header;
-  recv_message(client->conn_fd, &header, sizeof(header));
+  recv_message(conn_fd, &header, sizeof(header));
   if (header.res.status == CSIEBOX_PROTOCOL_STATUS_FAIL) {
     fprintf(stderr, "sync meta fail: %s\n", path);
     return;
@@ -315,7 +315,7 @@ static csiebox_protocol_status sync_file_meta(csiebox_client* client, char* path
 }
 
 static void sync_file_data(
-  csiebox_client* client, char* path) {
+  int conn_fd, int client_id, char* path) {
   fprintf(stderr, "file_data: %s\n", path);
   struct stat stat;
   memset(&stat, 0, sizeof(stat));
@@ -324,28 +324,28 @@ static void sync_file_data(
   memset(&file, 0, sizeof(file));
   file.message.header.req.magic = CSIEBOX_PROTOCOL_MAGIC_REQ;
   file.message.header.req.op = CSIEBOX_PROTOCOL_OP_SYNC_FILE;
-  file.message.header.req.client_id = client->client_id;
+  file.message.header.req.client_id = client_id;
   file.message.header.req.datalen = sizeof(file) - sizeof(csiebox_protocol_header);
   if ((stat.st_mode & S_IFMT) == S_IFDIR) {
     file.message.body.datalen = 0;
     fprintf(stderr, "dir datalen: %zu\n", file.message.body.datalen);
-    send_message(client->conn_fd, &file, sizeof(file));
+    send_message(conn_fd, &file, sizeof(file));
   } else {
     int fd = open(path, O_RDONLY);
     if (fd < 0) {
       fprintf(stderr, "open fail\n");
       file.message.body.datalen = 0;
-      send_message(client->conn_fd, &file, sizeof(file));
+      send_message(conn_fd, &file, sizeof(file));
     } else {
       file.message.body.datalen = lseek(fd, 0, SEEK_END);
       fprintf(stderr, "else datalen: %zd\n", file.message.body.datalen);
-      send_message(client->conn_fd, &file, sizeof(file));
+      send_message(conn_fd, &file, sizeof(file));
       lseek(fd, 0, SEEK_SET);
       char buf[4096];
       memset(buf, 0, 4096);
       size_t readlen;
       while ((readlen = read(fd, buf, 4096)) > 0) {
-        send_message(client->conn_fd, buf, readlen);
+        send_message(conn_fd, buf, readlen);
       }
       close(fd);
     }
@@ -358,7 +358,7 @@ static void sync_file_data(
   }
 }
 
-static char* convert_to_relative_path(csiebox_client* client, const char* path) {
+static char* convert_to_relative_path(char* root, const char* path) {
   char* ret = (char*)malloc(sizeof(char) * PATH_MAX);
   if (path[0] == '/') {
     strcpy(ret, path);
@@ -368,11 +368,11 @@ static char* convert_to_relative_path(csiebox_client* client, const char* path) 
     getcwd(dir, PATH_MAX);
     sprintf(ret, "%s/%s", dir, path);
   }
-  if (strncmp(client->root, ret, strlen(client->root)) != 0) {
+  if (strncmp(root, ret, strlen(root)) != 0) {
     free(ret);
     return NULL;
   }
-  size_t rootlen = strlen(client->root);
+  size_t rootlen = strlen(root);
   size_t retlen = strlen(ret);
   size_t i;
   for (i = 0; i < retlen; ++i) {
