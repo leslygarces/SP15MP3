@@ -24,6 +24,37 @@ static void login(csiebox_server* server, int conn_fd, csiebox_protocol_login* l
 static void logout(csiebox_server* server, int conn_fd);
 static char* get_user_homedir(csiebox_server* server, csiebox_client_info* info);
 static void rm_file(csiebox_server* server, int conn_fd, csiebox_protocol_rm* rm);
+static void send_end_sync_to_client(int conn_fd) ;
+static void sync_all_to_client(char* cwd, char* homedir, int conn_fd) ;
+
+
+static void sync_all_to_client(char* cwd, char* homedir, int conn_fd) {
+  chdir(cwd);
+  DIR* dir;
+  struct dirent* file;
+  struct stat file_stat;
+  dir = opendir(".");
+  while ((file = readdir(dir)) != NULL) {
+    if (strcmp(file->d_name, ".") == 0 ||
+        strcmp(file->d_name, "..") == 0) {
+    continue;
+    }
+    lstat(file->d_name, &file_stat); 
+    sync_file(conn_fd,conn_fd,homedir, file->d_name);
+    if ((file_stat.st_mode & S_IFMT) == S_IFDIR) {
+      if (chdir(file->d_name) != 0) {
+        fprintf(stderr, "bad dir %s\n", file->d_name);
+        continue;
+      }
+      sync_all(file->d_name, homedir, conn_fd);
+      chdir(cwd);
+    }
+  }
+  closedir(dir);
+  free(cwd);
+  send_end_sync_to_client(conn_fd);
+  return;
+}
 
 void csiebox_server_init(csiebox_server** server, int argc, char** argv) {
   csiebox_server* tmp = (csiebox_server*)malloc(sizeof(csiebox_server));
@@ -198,10 +229,11 @@ static int handle_request(csiebox_server* server, int conn_fd) {
     	    csiebox_protocol_login req;
     	    if (complete_message_with_header(conn_fd, &header, &req)) {
     	      login(server, conn_fd, &req);
-            fprintf(stderr, "before send end sync\n");
-
-            send_end_sync_to_client(conn_fd);
-            fprintf(stderr, "after send end sync\n");
+            fprintf(stderr, "before sync all\n");
+            csiebox_client_info* info = server->client[conn_fd];
+            char* homedir = get_user_homedir(server, info);
+            sync_all_to_client(homedir,homedir, conn_fd);
+            fprintf(stderr, "after sync all\n");
     	    }
     	    break;
     	  case CSIEBOX_PROTOCOL_OP_SYNC_META:
