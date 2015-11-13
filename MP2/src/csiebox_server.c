@@ -22,7 +22,7 @@ static int handle_request(csiebox_server* server, int conn_fd);
 static int get_account_info(csiebox_server* server,  const char* user, csiebox_account_info* info);
 static void login(csiebox_server* server, int conn_fd, csiebox_protocol_login* login);
 static void logout(csiebox_server* server, int conn_fd);
-static void sync_file(csiebox_server* server, int conn_fd, csiebox_protocol_meta* meta);
+static void sync_file_recieve(csiebox_server* server, int conn_fd, csiebox_protocol_meta* meta);
 static char* get_user_homedir(csiebox_server* server, csiebox_client_info* info);
 static void rm_file(csiebox_server* server, int conn_fd, csiebox_protocol_rm* rm);
 
@@ -196,7 +196,9 @@ static int handle_request(csiebox_server* server, int conn_fd) {
     	    fprintf(stderr, "sync meta\n");
     	    csiebox_protocol_meta meta;
     	    if (complete_message_with_header(conn_fd, &header, &meta)) {
-    	      sync_file(server, conn_fd, &meta);
+            csiebox_client_info* info = server->client[conn_fd];
+            char* homedir = get_user_homedir(server, info);
+    	      sync_file_recieve(homedir, conn_fd, &meta);
     	    }
           fprintf(stderr, "end sync meta\n");
     	    break;
@@ -302,109 +304,6 @@ static void logout(csiebox_server* server, int conn_fd) {
   free(server->client[conn_fd]);
   server->client[conn_fd] = 0;
   close(conn_fd);
-}
-
-static void sync_file(csiebox_server* server, int conn_fd, csiebox_protocol_meta* meta) {
-  csiebox_client_info* info = server->client[conn_fd];
-  char* homedir = get_user_homedir(server, info);
-  printf("homedir = %s\n", homedir);
-  char buf[PATH_MAX], req_path[PATH_MAX];
-  memset(buf, 0, PATH_MAX);
-  memset(req_path, 0, PATH_MAX);
-  recv_message(conn_fd, buf, meta->message.body.pathlen);
-  sprintf(req_path, "%s%s", homedir, buf);
-  free(homedir);
-  fprintf(stderr, "req_path: %s\n", req_path);
-  struct stat stat;
-  memset(&stat, 0, sizeof(struct stat));
-  int need_data = 0, change = 0;
-  if (lstat(req_path, &stat) < 0) {
-    need_data = 1;
-    change = 1;
-  } else { 					
-    if(stat.st_mode != meta->message.body.stat.st_mode) { 
-      chmod(req_path, meta->message.body.stat.st_mode);
-    }				
-    if(stat.st_atime != meta->message.body.stat.st_atime ||
-       stat.st_mtime != meta->message.body.stat.st_mtime){
-      struct utimbuf* buf = (struct utimbuf*)malloc(sizeof(struct utimbuf));
-      buf->actime = meta->message.body.stat.st_atime;
-      buf->modtime = meta->message.body.stat.st_mtime;
-      if(utime(req_path, buf)!=0){
-        printf("time fail\n");
-      }
-    }
-    uint8_t hash[MD5_DIGEST_LENGTH];
-    memset(hash, 0, MD5_DIGEST_LENGTH);
-    if ((stat.st_mode & S_IFMT) == S_IFDIR) {
-    } else {
-      md5_file(req_path, hash);
-    }
-    if (memcmp(hash, meta->message.body.hash, MD5_DIGEST_LENGTH) != 0) {
-      need_data = 1;
-    }
-
-  }
-
-  csiebox_protocol_header header;
-  memset(&header, 0, sizeof(header));
-  header.res.magic = CSIEBOX_PROTOCOL_MAGIC_RES;
-  header.res.op = CSIEBOX_PROTOCOL_OP_SYNC_META;
-  header.res.datalen = 0;
-  header.res.client_id = conn_fd;
-  if (need_data) {
-    header.res.status = CSIEBOX_PROTOCOL_STATUS_MORE;
-  } else {
-    header.res.status = CSIEBOX_PROTOCOL_STATUS_OK;
-  }
-  send_message(conn_fd, &header, sizeof(header));
-  
-  if (need_data) {
-    csiebox_protocol_file file;
-    memset(&file, 0, sizeof(file));
-    recv_message(conn_fd, &file, sizeof(file));
-    fprintf(stderr, "sync file: %zd\n", file.message.body.datalen);
-    if ((meta->message.body.stat.st_mode & S_IFMT) == S_IFDIR) {
-      fprintf(stderr, "dir\n");
-      mkdir(req_path, DIR_S_FLAG);
-    } else {
-      fprintf(stderr, "regular file\n");
-      int fd = open(req_path, O_CREAT | O_WRONLY | O_TRUNC, REG_S_FLAG);
-      size_t total = 0, readlen = 0;;
-      char buf[4096];
-      memset(buf, 0, 4096);
-      while (file.message.body.datalen > total) {
-        if (file.message.body.datalen - total < 4096) {
-          readlen = file.message.body.datalen - total;
-        } else {
-          readlen = 4096;
-        }
-        if (!recv_message(conn_fd, buf, readlen)) {
-          fprintf(stderr, "file broken\n");
-          break;
-        }
-        total += readlen;
-        if (fd > 0) {
-          write(fd, buf, readlen);
-        }
-      }
-      if (fd > 0) {
-        close(fd);
-      }
-    }
-    if (change) {
-      chmod(req_path, meta->message.body.stat.st_mode);
-      struct utimbuf* buf = (struct utimbuf*)malloc(sizeof(struct utimbuf));
-      buf->actime = meta->message.body.stat.st_atime;
-      buf->modtime = meta->message.body.stat.st_mtime;
-      utime(req_path, buf);
-    }
-    header.res.op = CSIEBOX_PROTOCOL_OP_SYNC_FILE;
-    header.res.status = CSIEBOX_PROTOCOL_STATUS_OK;
-    send_message(conn_fd, &header, sizeof(header));
-    fprintf(stderr, "file synced\n");
-  }
-  fprintf(stderr, "sync file ended\n");
 }
 
 static char* get_user_homedir(csiebox_server* server, csiebox_client_info* info) {
