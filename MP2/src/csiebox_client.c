@@ -108,7 +108,7 @@ int csiebox_client_run(csiebox_client* client) {
   }
   fprintf(stderr, "login success\n");
   
-  handle_server_sync(client,client->conn_fd)
+  handle_server_sync(client,client->conn_fd);
 
   if (!prepare_and_sync(client)) {
     fprintf(stderr, "sync fail\n");
