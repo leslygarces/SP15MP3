@@ -453,14 +453,14 @@ static void handle_inotify(csiebox_client* client) {
     if (event->mask & IN_CREATE) {
       fprintf(stderr, "type: create\n");
       fprintf(stderr, "sync file: %s\n", path);
-      sync_file(client, path);
+      sync_file(client->conn_fd,client->client_id,client->root, path);
       if (event->mask & IN_ISDIR) {
         add_inotify(client, path);
       }
     } else if (event->mask & IN_ATTRIB){
       fprintf(stderr, "type: attrib\n");
       fprintf(stderr, "sync file meta: %s\n", path);
-      sync_file_meta(client, path);
+      sync_file_meta(client->conn_fd,client->client_id,client->root, path);
     } else if (event->mask & IN_DELETE) {
       fprintf(stderr, "type: delete\n");
       fprintf(stderr, "rm file: %s\n", path);
@@ -468,7 +468,7 @@ static void handle_inotify(csiebox_client* client) {
     } else {
       fprintf(stderr, "type: modify\n");
       fprintf(stderr, "sync file: %s\n", path);
-      sync_file(client, path);
+      sync_file(client->conn_fd,client->client_id,client->root, path);
     }
     i += EVENT_SIZE + event->len;
   }
