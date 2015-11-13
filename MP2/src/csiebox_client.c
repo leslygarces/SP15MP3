@@ -273,7 +273,9 @@ static void sync_all(csiebox_client* client, char* longest_path, int level) {
 
 static void sync_file(csiebox_client* client, char* path) {
   csiebox_protocol_status status;
+  fprintf(stderr, "before sync meta for  %s\n", path);
   status = sync_file_meta(client, path);
+  fprintf(stderr, "after sync meta for  %s status is %d\n", path, status);
   if (status == CSIEBOX_PROTOCOL_STATUS_MORE) {
     sync_file_data(client, path);
   }
@@ -297,7 +299,9 @@ static csiebox_protocol_status sync_file_meta(csiebox_client* client, char* path
   } else {
     md5_file(path, meta.message.body.hash);
   }
+  fprintf(stderr, "sending meta for: %s\n", path);
   send_message(client->conn_fd, &meta, sizeof(meta));
+  fprintf(stderr, "sending path for: %s\n", path);
   send_message(client->conn_fd, relative, strlen(relative));
   free(relative);
   
