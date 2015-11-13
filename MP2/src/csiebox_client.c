@@ -22,7 +22,7 @@ static void sync_all(csiebox_client* client, char* longest_path, int level);
 static char* check_walked_dir(csiebox_client* client);
 static void sync_file(int conn_fd,int client_id, char* root, char* path);
 static csiebox_protocol_status sync_file_meta(int conn_fd,int client_id, char* root, char* path);
-static void sync_file_data(int conn_fd,int client_id,int client_id, char* path);
+static void sync_file_data(int conn_fd,int client_id, char* path);
 static char* convert_to_relative_path(char* root, const char* path);
 static void monitor_home(csiebox_client* client);
 static void rm_file(csiebox_client* client, char* path, int is_dir);
