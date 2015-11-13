@@ -181,9 +181,9 @@ static int parse_arg(csiebox_server* server, int argc, char** argv) {
 static void send_end_sync_to_client(int conn_fd) {
   csiebox_protocol_header req;
   memset(&req, 0, sizeof(req));
-  req.magic = CSIEBOX_PROTOCOL_MAGIC_REQ;
-  req.op = CSIEBOX_PROTOCOL_OP_SYNC_END;
-  req.datalen = 0;
+  req.req.magic = CSIEBOX_PROTOCOL_MAGIC_REQ;
+  req.req.op = CSIEBOX_PROTOCOL_OP_SYNC_END;
+  req.req.datalen = 0;
   send_message(conn_fd, &req, sizeof(req));
 }
 
