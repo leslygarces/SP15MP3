@@ -109,6 +109,7 @@ int csiebox_server_run(csiebox_server* server) {
                 /* Data arriving on an already-connected socket. */
                 if (!handle_request(server, i)) {
                     //close (i);
+                    fprintf(stderr, "*******clearing client...\n");
                     FD_CLR (i, &active_fd_set);
                 }
                 fprintf(stderr, "after handle_request new ...\n");              
@@ -215,9 +216,9 @@ static int handle_request(csiebox_server* server, int conn_fd) {
   	  }    
     }
   }else {
-    return -1;
+    return 0;
   }
-  return 0;
+  return 1;
 }
 static int get_account_info(
   csiebox_server* server,  const char* user, csiebox_account_info* info) {
