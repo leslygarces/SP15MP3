@@ -352,7 +352,7 @@ static void sync_file_data(
   }
 
   csiebox_protocol_header header;
-  recv_message(client->conn_fd, &header, sizeof(header));
+  recv_message(conn_fd, &header, sizeof(header));
   if (header.res.status != CSIEBOX_PROTOCOL_STATUS_OK) {
     fprintf(stderr, "sync data fail: %s\n", path);
   }
