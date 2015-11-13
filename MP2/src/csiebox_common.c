@@ -8,6 +8,8 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <limits.h>
+#include <stdio.h>
+
 
 
 static void sync_file(int conn_fd,int client_id, char* root, char* path) {
