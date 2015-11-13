@@ -136,7 +136,7 @@
   memset(req_path, 0, PATH_MAX);
   recv_message(conn_fd, buf, meta->message.body.pathlen);
   sprintf(req_path, "%s%s", homedir, buf);
-  free(homedir);
+  //free(homedir);
   fprintf(stderr, "req_path: %s\n", req_path);
   struct stat stat;
   memset(&stat, 0, sizeof(struct stat));
