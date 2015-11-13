@@ -46,7 +46,7 @@ static void sync_all_to_client(char* cwd, char* homedir, int conn_fd) {
         fprintf(stderr, "bad dir %s\n", file->d_name);
         continue;
       }
-      sync_all(file->d_name, homedir, conn_fd);
+      sync_all_to_client(file->d_name, homedir, conn_fd);
       chdir(cwd);
     }
   }
